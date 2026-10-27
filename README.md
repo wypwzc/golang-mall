@@ -79,15 +79,21 @@ REDIS_ENABLED=false
 ./scripts/tasks.sh start-all
 ```
 
-脚本会编译 5 个服务，各自开一个窗口跑起来。也可以手动一个一个启动：
+会先编译 5 个服务，然后放到后台跑，每个服务的输出写到 `logs/<服务名>.log`。
+脚本最后会打印一遍健康检查结果，全是 `status: ok` 就说明起来了。
+
+想重启某个服务，直接 `stop-all` 再 `start-all`。已经占着端口的服务会自动跳过，不会启动第二份。
+
+查看实时日志：
 
 ```bash
-./scripts/tasks.sh build
-./bin/user.exe      # 终端 1
-./bin/product.exe   # 终端 2
-./bin/cart.exe      # 终端 3
-./bin/order.exe     # 终端 4
-./bin/gateway.exe   # 终端 5
+./scripts/tasks.sh log gateway    # 也可以写 user / product / cart / order
+```
+
+也可以手动一个一个启动（前台运行，Ctrl+C 停，适合调试）：
+
+```bash
+./scripts/tasks.sh run user
 ```
 
 检查是否都起来了：
@@ -107,6 +113,27 @@ REDIS_ENABLED=false
 
 ```bash
 ./scripts/tasks.sh stop-all
+```
+
+## 常用命令
+
+```bash
+./scripts/tasks.sh start-all     # 编译 + 后台启动 + 自动健康检查
+./scripts/tasks.sh health        # 看状态
+./scripts/tasks.sh log user      # 看某个服务的实时日志
+./scripts/tasks.sh stop-all      # 全停
+./scripts/tasks.sh run user      # 单个前台跑，Ctrl+C 停，调试用
+```
+
+其他命令：
+
+```bash
+./scripts/tasks.sh build         # 只编译，不启动
+./scripts/tasks.sh test          # 跑单元测试
+./scripts/tasks.sh fmt           # 格式化代码
+./scripts/tasks.sh vet           # 静态检查
+./scripts/tasks.sh local-db      # 建库建账号
+./scripts/tasks.sh clean         # 清理 bin/ 和 logs/
 ```
 
 ## 功能
@@ -213,8 +240,19 @@ TEST_MYSQL_DSN="root:123456@tcp(127.0.0.1:3306)/mall_product?parseTime=true" \
 **登录报 `Access denied for user 'mall_user'`**
 `.env` 里的 `USER_DB_PASSWORD` 和数据库账号密码对不上。重新跑一次 `./scripts/tasks.sh local-db`。
 
-**页面能打开但接口全 404**
-网关起来了，但业务服务没起来。跑 `./scripts/tasks.sh health` 看哪几个端口没响应。
+**服务起来了但打不开页面**
+先看 `./scripts/tasks.sh health`。如果 gateway 显示未启动，看 `logs/gateway.log` 里的报错。
+最常见的是端口被别的程序占了。
+
+**页面能打开，但接口全 404 或报 50301**
+网关正常，但业务服务没起来。`health` 里显示"未启动"的那个服务，去看它的日志：
+
+```bash
+./scripts/tasks.sh log product
+```
+
+**`stop-all` 提示"未运行"，但端口确实被占着**
+说明占端口的不是本项目的进程。用 `netstat -ano | findstr :8080` 看看是哪个 PID。
 
 **改了前端代码没生效**
 前端文件是 `go:embed` 打进网关的，改完要重新编译：
@@ -226,3 +264,8 @@ go build -o bin/gateway.exe ./services/gateway/cmd/server
 **商品图片打不开**
 图片存在商品服务的工作目录 `uploads/` 下，网关转发 `/uploads/*` 过去。
 确认商品服务是从项目根目录启动的。
+
+
+
+
+

@@ -24,3 +24,6 @@ coverage.html
 
 # 商品图片上传目录（运行时生成）
 uploads/
+
+# 服务运行日志
+logs/
