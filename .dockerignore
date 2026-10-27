@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+.env.local
+bin/
+docs/
+frontend/node_modules
+frontend/dist
+*.log
+README.md

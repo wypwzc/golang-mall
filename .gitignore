@@ -1,0 +1,26 @@
+# 环境变量（含密码）
+.env
+.env.local
+
+# 编译产物
+bin/
+dist/
+*.exe
+*.test
+
+# 依赖与缓存
+node_modules/
+vendor/
+
+# 日志与临时文件
+*.log
+coverage.out
+coverage.html
+
+# 编辑器
+.idea/
+.vscode/
+.DS_Store
+
+# 商品图片上传目录（运行时生成）
+uploads/
