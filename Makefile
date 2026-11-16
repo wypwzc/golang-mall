@@ -3,10 +3,10 @@
 SERVICES := gateway user product cart order payment
 GO       ?= go
 
-.PHONY: help tidy fmt vet build test test-race infra infra-down monitoring ps clean
+.PHONY: help tidy fmt vet build test test-race clean
 
 help:
-	@echo "make tidy | fmt | vet | build | test | test-race | infra | infra-down | monitoring | ps | clean"
+	@echo "make tidy | fmt | vet | build | test | test-race | clean"
 
 tidy:
 	$(GO) mod tidy
@@ -26,19 +26,6 @@ test:
 
 test-race:
 	$(GO) test -race ./...
-
-infra:
-	docker compose up -d mysql redis
-	docker compose ps
-
-infra-down:
-	docker compose down
-
-monitoring:
-	docker compose --profile monitoring up -d prometheus
-
-ps:
-	docker compose ps
 
 clean:
 	rm -rf bin

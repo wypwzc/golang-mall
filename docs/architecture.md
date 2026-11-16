@@ -22,11 +22,8 @@
 
 | 组件 | 版本 | 说明 |
 |---|---|---|
-| Go | 1.26.3 | 已安装（本机为 windows/386，容器内构建 linux/amd64） |
-| Docker | 29.4.1 | 已安装 |
-| Docker Compose | v5.1.3 | 已安装 |
-| Node.js | 22.21.1 | 前端构建 |
-| MySQL | 8.0.43 | 本机已装，同时提供容器版 |
+| Go | 1.26.3 | 已安装 |
+| MySQL | 8.0.43 | 本机已装 |
 
 ---
 
@@ -58,7 +55,7 @@ flowchart LR
         R[("Redis 7")]
     end
 
-    subgraph OBS["可观测（可选 profile: monitoring）"]
+    subgraph OBS["可观测（可选）"]
         PR["Prometheus :9090<br/>仅抓取，不接 Grafana"]
     end
 
@@ -87,9 +84,9 @@ flowchart LR
     PR -.->|抓取 /metrics| SVC
 ```
 
-**部署视图**：单机 Docker Compose，一个自定义 bridge 网络 `mall-net`。只有 `nginx`（80）对外暴露端口，业务服务端口仅在网络内可达（本地调试时用 `ports` 映射到 127.0.0.1）。
+**部署视图**：本地多进程部署，网关（8080）对外提供前端静态资源与 API 入口，四个业务服务（8081~8084）只监听本机。用 `./scripts/tasks.sh start-all` 一键启动，`stop-all` 停止。
 
-**本项目不接入 Grafana**：指标通过各服务 `/metrics` 暴露，Prometheus 以可选 profile 启动（`docker compose --profile monitoring up -d`），只用于确认指标可用；不引入任何额外的可视化容器。
+**本项目不接入 Grafana**：指标通过各服务 `/metrics` 暴露，Prometheus 可独立启动，只用于确认指标可用；不引入任何额外的可视化组件。
 
 ---
 
@@ -609,16 +606,15 @@ sequenceDiagram
 
 | 阶段 | 交付物 | 验证方式 |
 |---|---|---|
-| 二 | 目录骨架、`pkg/`（config/logger/response/errors/middleware/metrics）、Compose 起 MySQL+Redis | `docker compose up -d mysql redis` 后 `make health` 通过 |
+| 二 | 目录骨架、`pkg/`（config/logger/response/errors/middleware/metrics）、本机 MySQL 建库 | 本机 MySQL 就绪后 `./scripts/tasks.sh health` 通过 |
 | 三 | User 服务（注册/登录/JWT/权限）+ 迁移脚本 | `go test ./services/user/...`，curl 跑通注册登录 |
 | 四 | Product 服务（分类/商品/搜索/上下架/库存扣减） | 单测 + 并发扣减测试（100 goroutine 买 10 件只成功 10） |
 | 五 | Cart 服务 | 单测 + 跨用户越权测试 |
 | 六 | Order 服务（下单/取消/幂等/补偿） | 幂等测试、库存不足测试、取消恢复不重复测试 |
 | 七 | Payment 服务（模拟支付/重复支付） | 重复支付只成功一次；支付后订单变 paid |
 | 八 | Gateway（路由/JWT/CORS/请求ID/超时/错误） | 全链路 curl 脚本 |
-| 九 | 前端（Vue3 + TS + Element Plus，用户端 + 管理端） | `npm run build` 通过，页面走通全流程 |
-| 十 | 测试与质量（go test / go vet / 前端构建 / 集成脚本） | 全绿 |
-| 十一 | Dockerfile × 6 + Compose 全量 + Nginx | `docker compose up -d --build` 后健康检查全 healthy |
+| 九 | 前端（原生 ES Modules，用户端 + 管理端） | 页面走通全流程，无 JS 报错 |
+| 十 | 测试与质量（go test / go vet / 集成脚本） | 全绿 |
 | 十二 | Prometheus + 三份文档 + Swagger | `/metrics` 有数据，Prometheus targets 全 UP |
 | 十三 | 验收清单逐项验证 + 故障排查指南 | 按清单打勾 |
 

@@ -50,22 +50,10 @@ usage() {
   start-all       编译并在后台启动全部服务，日志写到 logs/
   stop-all        停止全部服务（按端口找进程，不会误杀同名的其他程序）
   log <service>   实时查看某个服务的日志
-  local-db        在本机 MySQL 上建库建账号（不需要 Docker）
+  local-db        在本机 MySQL 上建库建账号
   health          检查各服务健康状态
-  infra           启动 MySQL + Redis
-  infra-down      停止基础设施
-  monitoring      启动 Prometheus（可选）
-  ps              查看容器状态
-  docker-logs     跟踪容器日志，默认 mysql
   clean           清理编译产物和日志
 EOF
-}
-
-need_docker() {
-  if ! docker info >/dev/null 2>&1; then
-    echo "错误：Docker 守护进程未运行，请先启动 Docker Desktop" >&2
-    exit 1
-  fi
 }
 
 case "${1:-help}" in
@@ -162,27 +150,6 @@ case "${1:-help}" in
     ;;
   local-db)
     ./scripts/local-db-init.sh
-    ;;
-  infra)
-    need_docker
-    docker compose up -d mysql redis
-    docker compose ps
-    ;;
-  infra-down)
-    need_docker
-    docker compose down
-    ;;
-  monitoring)
-    need_docker
-    docker compose --profile monitoring up -d prometheus
-    ;;
-  ps)
-    need_docker
-    docker compose ps
-    ;;
-  docker-logs)
-    need_docker
-    docker compose logs -f "${2:-mysql}"
     ;;
   clean)
     rm -rf bin logs

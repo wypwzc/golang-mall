@@ -13,7 +13,7 @@
 | ORM | GORM v1.31 | 迁移用 `go:embed` + 自建 `schema_migrations` 表 |
 | 数据库 | MySQL 8 | 单实例多 schema，每个服务一个账号 |
 | 鉴权 | JWT (HS256) + bcrypt | 网关验签后把身份写进请求头 |
-| 前端 | 原生 JS | hash 路由，`go:embed` 打包进网关 |
+| 前端 | 原生 ES Modules | hash 路由 + 事件委托 + 状态订阅，`go:embed` 打包进网关 |
 | 监控 | Prometheus | 各服务暴露 `/metrics` |
 
 Redis 代码保留但默认关闭（`REDIS_ENABLED=false`），本地跑不需要装。
@@ -36,7 +36,12 @@ go-mall/
 ├── services/
 │   ├── gateway/             8080  API 网关 + 前端静态资源
 │   │   ├── internal/proxy/  反向代理与身份注入
-│   │   ├── internal/web/    前端文件（dist/）
+│   │   ├── internal/web/
+│   │   │   └── dist/        前端（无需构建，改完重新编译网关即可）
+│   │   │       ├── css/     设计 token / 通用组件 / 页面样式
+│   │   │       ├── js/core/ 路由、请求、状态、UI 组件、事件委托
+│   │   │       ├── js/views/ 六个页面模块
+│   │   │       └── js/main.js 入口编排
 │   │   └── cmd/server/
 │   ├── user/                8081  注册、登录、个人资料、用户管理
 │   ├── product/             8082  商品、分类、库存扣减、图片上传

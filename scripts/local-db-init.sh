@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 在本机已安装的 MySQL 上初始化 go-mall 所需的库与账号（不使用 Docker）。
+# 在本机已安装的 MySQL 上初始化 go-mall 所需的库与账号。
 #
 # 前置条件：本机 MySQL 服务已启动
 #   Windows（管理员 PowerShell）：net start MySQL80

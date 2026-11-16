@@ -1,7 +1,7 @@
 // Package config 负责加载配置。
 //
 // 优先级：环境变量 > .env 文件 > 代码内默认值。
-// 容器里由 docker-compose 注入环境变量，本地开发读项目根目录的 .env。
+// 环境变量优先；本地开发回退读项目根目录的 .env。
 package config
 
 import (
@@ -81,7 +81,7 @@ var dbPasswordEnv = map[string]string{
 
 // Load 加载指定服务的配置。service 取值：gateway/user/product/cart/order/payment。
 func Load(service string) (*Config, error) {
-	// .env 只在本地开发时存在；容器里由 compose 注入环境变量，读不到就算了。
+	// .env 只在本地开发时存在，读不到就算了（生产环境由外部注入环境变量）。
 	_ = loadDotEnv(".env")
 
 	// 优先读通用的 MYSQL_PASSWORD，没有则读该服务专属的密码变量
