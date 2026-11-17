@@ -23,16 +23,23 @@ port_pids() {
     | sort -u
 }
 
+# 探测某个端口的 healthz 是否返回 ok。
+# 必须加 --noproxy '*'：否则系统代理（如 Mihomo/Clash）会劫持 127.0.0.1 的请求，
+# 探不通就误判服务未启动。
+health_ok() {
+  curl --noproxy '*' -s -m 2 "http://127.0.0.1:$1/healthz" 2>/dev/null \
+    | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'
+}
+
 # 打印所有服务的健康状态
 show_health() {
   for i in "${!SERVICES[@]}"; do
     printf '%-8s :%s  ' "${SERVICES[$i]}" "${PORTS[$i]}"
-    if curl -s -m 2 "http://127.0.0.1:${PORTS[$i]}/healthz"; then
-      :
+    if health_ok "${PORTS[$i]}"; then
+      echo "ok"
     else
-      printf '未启动'
+      echo "未启动"
     fi
-    echo
   done
 }
 
@@ -90,29 +97,68 @@ case "${1:-help}" in
   start-all)
     mkdir -p bin logs
 
+    # ---- 1. 编译：逐个打印进度 ----
     for s in "${SERVICES[@]}"; do
-      echo "==> 编译 $s"
-      go build -o "bin/$s$EXE" "./services/$s/cmd/server"
+      echo "==> 编译 $s ..."
+      go build -o "bin/$s$EXE" "./services/$s/cmd/server" || {
+        echo "编译失败：$s" >&2
+        exit 1
+      }
     done
+    echo "==> 编译完成（5/5）"
+    echo
 
-    # 先检查端口，避免端口被占用时新进程启动失败却没人发现
+    # ---- 2. 启动：用 healthz 判断已在跑的，跳过（不调 netstat，避免虚拟网卡导致卡顿）----
+    STARTED=()
     for i in "${!SERVICES[@]}"; do
       s="${SERVICES[$i]}"
       p="${PORTS[$i]}"
 
-      if [[ -n "$(port_pids "$p")" ]]; then
-        echo "跳过 $s：端口 $p 已被占用（要重启请先 ./scripts/tasks.sh stop-all）"
-        continue
+      if health_ok "$p"; then
+        echo "[跳过] $s (:$p) 已在运行"
+      else
+        nohup "./bin/$s$EXE" > "logs/$s.log" 2>&1 &
+        echo "[启动中] $s (:$p)  pid=$!"
+        STARTED+=("$i")
       fi
-
-      # nohup + & ：脚本退出后服务继续跑，输出写到 logs/<服务>.log
-      nohup "./bin/$s$EXE" > "logs/$s.log" 2>&1 &
-      echo "启动 $s (:$p)  日志 logs/$s.log"
-      sleep 1
     done
 
+    # ---- 3. 实时轮询：哪个起来就报哪个，全部就绪或超时才结束 ----
+    if (( ${#STARTED[@]} > 0 )); then
+      echo
+      echo "==> 等待服务就绪（逐个上报，最长 60 秒）..."
+      deadline=$(( $(date +%s) + 60 ))
+      remaining="${#STARTED[@]}"
+
+      while (( remaining > 0 )); do
+        next=()
+        for i in "${STARTED[@]}"; do
+          s="${SERVICES[$i]}"
+          p="${PORTS[$i]}"
+          if health_ok "$p"; then
+            echo "  [OK] $s (:$p) 启动完成"
+            remaining=$((remaining - 1))
+          else
+            next+=("$i")
+          fi
+        done
+        STARTED=("${next[@]}")
+        (( remaining == 0 )) && break
+
+        if (( $(date +%s) >= deadline )); then
+          echo
+          echo "==> 超时：以下服务 60 秒内未就绪，请查日志：" >&2
+          for i in "${STARTED[@]}"; do
+            echo "  ${SERVICES[$i]} -> tail -n 50 logs/${SERVICES[$i]}.log" >&2
+          done
+          exit 1
+        fi
+        sleep 0.5
+      done
+    fi
+
     echo
-    sleep 2
+    echo "==> 全部服务启动完成（5/5）"
     show_health
     echo
     echo "浏览器打开 http://127.0.0.1:8080"

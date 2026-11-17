@@ -6,7 +6,10 @@
 #
 # 用法：
 #   ./scripts/local-db-init.sh
-#   或先导出 root 密码再执行：MYSQL_LOCAL_ROOT_PASSWORD=xxx ./scripts/local-db-init.sh
+# 密码来源优先级：
+#   1. 环境变量 MYSQL_LOCAL_ROOT_PASSWORD（命令行临时指定）
+#   2. .env 里的 MYSQL_ROOT_PASSWORD（推荐，本地开发已配好）
+#   3. 交互式输入（仅上面两处都为空时）
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -37,9 +40,21 @@ EOF
   exit 1
 fi
 
-# 2. 取 root 密码（不写进脚本，也不回显）
-ROOT_PWD="${MYSQL_LOCAL_ROOT_PASSWORD:-}"
+# 2. 取 root 密码：命令行环境变量 > .env > 交互式输入
+# 注意：.env 在第 19 行已经 source 过，MYSQL_ROOT_PASSWORD 此时已在环境中
+ROOT_PWD="${MYSQL_LOCAL_ROOT_PASSWORD:-${MYSQL_ROOT_PASSWORD:-}}"
 if [[ -z "$ROOT_PWD" ]]; then
+  # 非交互式终端（IDE 内置终端、管道）里 read -s 会失败，给出明确指引而不是卡住
+  if [[ ! -t 0 ]]; then
+    cat >&2 <<EOF
+错误：无法读取密码（当前终端不支持交互式输入，且 .env 中没有 MYSQL_ROOT_PASSWORD）
+
+解决办法二选一：
+  1. 在 .env 里补一行：MYSQL_ROOT_PASSWORD=你的root密码
+  2. 命令行指定：MYSQL_LOCAL_ROOT_PASSWORD=你的密码 ./scripts/tasks.sh local-db
+EOF
+    exit 1
+  fi
   read -r -s -p "请输入本机 MySQL root 密码: " ROOT_PWD
   echo
 fi

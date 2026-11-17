@@ -47,26 +47,65 @@ go-mall/
 │   ├── product/             8082  商品、分类、库存扣减、图片上传
 │   ├── cart/                8083  购物车
 │   └── order/               8084  订单、支付、取消
+├── tasks.bat                PowerShell / CMD 下的命令入口（转调 tasks.sh）
 ├── scripts/
-│   ├── tasks.sh             常用命令
+│   ├── tasks.sh             常用命令（Git Bash 下直接用）
 │   └── local-db-init.sh     在本机 MySQL 建库建账号
 └── docs/architecture.md     架构说明
 ```
 
 ## 快速开始
 
-### 1. 准备数据库
+### 前置条件
 
-本机装好 MySQL 8，然后建库建账号（会提示输入 root 密码）：
+- Go 1.26.x（单模块，不需要配 GOPATH）
+- MySQL 8，本机已安装
+- 终端二选一：**Git Bash**（跑 `.sh`），或 **PowerShell / CMD**（跑根目录的 `tasks.bat`）
+
+> **PowerShell 用户注意**：直接敲 `./scripts/tasks.sh start-all` 会卡住——
+> Windows 会把 `.sh` 关联到 `C:\Windows\System32\bash.exe`（那是 **WSL** 的 bash，
+> 不是 Git Bash）。用项目根目录的批处理包装即可，效果完全一样：
+>
+> ```powershell
+> .\tasks.bat start-all
+> .\tasks.bat stop-all
+> .\tasks.bat health
+> .\tasks.bat log gateway
+> ```
+>
+> 下文所有 `./scripts/tasks.sh xxx` 命令，在 PowerShell 里都换成 `.\tasks.bat xxx`。
+
+### 1. 启动 MySQL 服务
+
+MySQL 装好后默认不随机启动，先让它跑起来。以**管理员身份**打开 PowerShell：
+
+```powershell
+net start MySQL80
+```
+
+看到"服务已成功启动"即可。也可以 `Win+R` 输入 `services.msc`，找到 `MySQL80` 右键启动。
+如果提示"服务名无效"，用 `sc query state= all | findstr /i mysql` 查真实服务名
+（`MySQL80` 是 MySQL 8.0 的默认实例名，改过实例名的用自己的）。
+
+验证 MySQL 真的可用（可选，能返回版本号才算通）：
+
+```bash
+mysql -uroot -p -e "SELECT VERSION()"
+```
+
+> MySQL 没起就执行后面的 `start-all`，业务服务会卡在连接重试，网关能起但页面报错。
+
+### 2. 建库建账号（只需做一次）
 
 ```bash
 ./scripts/tasks.sh local-db
 ```
 
-这一步会创建 `mall_user`、`mall_product`、`mall_cart`、`mall_order` 四个库和对应账号。
+脚本从 `.env` 的 `MYSQL_ROOT_PASSWORD` 读取 root 密码（已配好为 `123456`），**不用手工输入**。
+会创建 `mall_user`、`mall_product`、`mall_cart`、`mall_order` 四个库和对应账号。
 建表由各服务启动时自动执行，不用手动跑 SQL。
 
-### 2. 配置
+### 3. 配置
 
 项目根目录的 `.env` 已经配好本地开发用的参数，主要看这几项：
 
@@ -76,38 +115,36 @@ MYSQL_PORT=3306
 REDIS_ENABLED=false
 ```
 
-如果本机 MySQL 端口或密码不同，改这里即可。
+如果本机 MySQL 端口或密码不同，改这里即可（改密码的话 `MYSQL_ROOT_PASSWORD` 和对应业务的 `*_DB_PASSWORD` 都要改）。
 
-### 3. 启动
+### 4. 启动服务
 
 ```bash
 ./scripts/tasks.sh start-all
 ```
 
-会先编译 5 个服务，然后放到后台跑，每个服务的输出写到 `logs/<服务名>.log`。
-脚本最后会打印一遍健康检查结果，全是 `status: ok` 就说明起来了。
+脚本会先逐个编译 5 个服务并打印进度，然后后台启动。启动过程是**实时上报**的：
+哪个服务的 `/healthz` 通了就立刻打印 `[OK] xxx 启动完成`，全绿才结束——
+不用盯着黑屏猜哪个卡住了。已经起来的服务会显示 `[跳过]`，不会启动第二份。
+每个服务的详细输出写到 `logs/<服务名>.log`。
 
-想重启某个服务，直接 `stop-all` 再 `start-all`。已经占着端口的服务会自动跳过，不会启动第二份。
+如果某个服务 60 秒内没起来，脚本会点名是哪几个，并给出查日志的命令
+（例如 `tail -n 50 logs/order.log`）——多半是 MySQL 没起或端口冲突。
 
-查看实时日志：
+检查状态 / 看日志：
 
 ```bash
-./scripts/tasks.sh log gateway    # 也可以写 user / product / cart / order
+./scripts/tasks.sh health          # 各服务健康状态
+./scripts/tasks.sh log gateway     # 实时日志，也可写 user / product / cart / order
 ```
 
-也可以手动一个一个启动（前台运行，Ctrl+C 停，适合调试）：
+也可以手动单个前台启动（Ctrl+C 停，适合调试）：
 
 ```bash
 ./scripts/tasks.sh run user
 ```
 
-检查是否都起来了：
-
-```bash
-./scripts/tasks.sh health
-```
-
-### 4. 打开浏览器
+### 5. 打开浏览器
 
 **http://127.0.0.1:8080**
 
@@ -119,6 +156,9 @@ REDIS_ENABLED=false
 ```bash
 ./scripts/tasks.sh stop-all
 ```
+
+> **改了前端代码要重新编译**：前端是 `go:embed` 打进网关二进制的，光刷新浏览器没用。
+> 重跑 `start-all` 或 `go build -o bin/gateway.exe ./services/gateway/cmd/server` 才生效。
 
 ## 常用命令
 
@@ -244,6 +284,10 @@ TEST_MYSQL_DSN="root:123456@tcp(127.0.0.1:3306)/mall_product?parseTime=true" \
 
 **登录报 `Access denied for user 'mall_user'`**
 `.env` 里的 `USER_DB_PASSWORD` 和数据库账号密码对不上。重新跑一次 `./scripts/tasks.sh local-db`。
+
+**`start-all` 卡在"等待服务就绪"不动**
+脚本最多等 60 秒，超时会点名哪个服务没起来。按提示 `tail -n 50 logs/<服务>.log` 看原因：
+最常见的是 MySQL 没起（先 `net start MySQL80`），其次是端口被别的程序占了。
 
 **服务起来了但打不开页面**
 先看 `./scripts/tasks.sh health`。如果 gateway 显示未启动，看 `logs/gateway.log` 里的报错。
